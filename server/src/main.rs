@@ -26,7 +26,12 @@ use {
     cyw43_pio::{PioSpi, DEFAULT_CLOCK_DIVIDER},
     
     embassy_executor::Spawner,
-    embassy_time::{Duration, Timer},
+    embassy_time::{
+        Duration, 
+        Timer,
+        with_deadline,
+        Instant,
+    },
     embassy_net::{
         tcp::TcpSocket,
         Config,
@@ -125,15 +130,18 @@ async fn main(spawner: Spawner) {
     let (stack, runner) = embassy_net::new(net_device, config, RESOURCES.init(StackResources::new()), seed);
 
     unwrap!(spawner.spawn(net_task(runner)));
-
+    
     // Connecting to the Network
+    control.gpio_set(0, false).await;
     loop {
         match control.join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes())).await {
             Ok(_) => {
+                control.gpio_set(0, true).await;
                 break
             },
             Err(err) => {
                 if err.status<16 {
+                    control.gpio_set(0, false).await;
                     log::info!("Join failed with error = {:?}", err);
                 }
             }
@@ -146,7 +154,6 @@ async fn main(spawner: Spawner) {
         Timer::after_millis(100).await;
     }
     log::info!("DHCP is Now Up!");
-    control.gpio_set(0, false).await;
 
     match stack.config_v4(){
         Some(value) => {
@@ -162,20 +169,36 @@ async fn main(spawner: Spawner) {
     loop {
         // Network Loop
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(Duration::from_secs(180)));
-        control.gpio_set(0, false).await;
+        let start = Instant::now();
 
-        Timer::after_millis(100).await;
+        match stack.config_v4(){
+            Some(value) => {
+                log::info!("Server Address: {:?}", value.address.address());
+            },
+            None => log::warn!("Unable to Get the Adrress")
+        }
+
         log::info!("Listening on TCP: {}...", TCP_PORT);
-
-        if let Err(e) = socket.accept(TCP_PORT).await {
-            log::warn!("Accept Error: {:?}", e);
-            continue;
+        match with_deadline(start + Duration::from_secs(5), socket.accept(TCP_PORT)).await {
+            Ok(value) => {
+                match value {
+                    Ok(()) => {
+                        socket.set_timeout(Some(Duration::from_secs(5)));
+                    }
+                    Err(e) => {
+                        log::warn!("Accept Error: {:?}", e);
+                        continue;
+                    }
+                }
+            }
+            Err(_) => {
+                log::info!("No Connection after 5s");
+                continue;
+            }
         }
 
         Timer::after_millis(100).await;
         log::info!("Received Connection from {:?}", socket.remote_endpoint());
-        control.gpio_set(0, true).await;
 
         loop {
             let n = match socket.read(&mut buf).await {
@@ -211,7 +234,7 @@ async fn main(spawner: Spawner) {
                     log::warn!("Connection is Closed");
                     break;
                 }
-            };
+            }
         }
     }
 }
