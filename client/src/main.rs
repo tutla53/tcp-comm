@@ -86,6 +86,7 @@ async fn main(spawner: Spawner) -> ! {
         }
         Timer::after(Duration::from_millis(500)).await;
     }
+
     // Wait for DHCP, not necessary when using static IP
     log::info!("Waiting for DHCP...");
     while !stack.is_config_up() {
@@ -143,7 +144,7 @@ async fn main(spawner: Spawner) -> ! {
                 }
             };
             println!("{}", core::str::from_utf8(&buf[..n]).unwrap());
-            Timer::after(Duration::from_millis(3000)).await;
+            Timer::after(Duration::from_millis(1000)).await;
         }
     }
 }
