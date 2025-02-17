@@ -75,11 +75,12 @@ async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'sta
 }
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
+async fn main(spawner: Spawner) -> ! {
     let ph = embassy_rp::init(Default::default());
     let usb_driver = UsbDriver::new(ph.USB, Irqs);
     let r = split_resources!(ph);
     let p = r.network_resources;
+    let mut led_status = false;
     
     unwrap!(spawner.spawn(logger_task(usb_driver)));
     // unwrap!(spawner.spawn(servo_pio(r.servo_pio_resources)));
@@ -111,7 +112,7 @@ async fn main(spawner: Spawner) {
 
     control.init(clm).await;
     control
-        .set_power_management(cyw43::PowerManagementMode::PowerSave)
+        .set_power_management(cyw43::PowerManagementMode::Aggressive)
         .await;
 
     log::info!("CYW43 has been set!");    
@@ -187,18 +188,23 @@ async fn main(spawner: Spawner) {
                     }
                     Err(e) => {
                         log::warn!("Accept Error: {:?}", e);
+                        control.gpio_set(0, led_status).await;
+                        led_status  = !led_status;
                         continue;
                     }
                 }
             }
             Err(_) => {
                 log::info!("No Connection after 5s");
+                control.gpio_set(0, led_status).await;
+                led_status  = !led_status;
                 continue;
             }
         }
 
         Timer::after_millis(100).await;
         log::info!("Received Connection from {:?}", socket.remote_endpoint());
+        control.gpio_set(0, true).await;
 
         loop {
             let n = match socket.read(&mut buf).await {
