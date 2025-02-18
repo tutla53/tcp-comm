@@ -76,9 +76,9 @@ async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'sta
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
-    let ph = embassy_rp::init(Default::default());
-    let usb_driver = UsbDriver::new(ph.USB, Irqs);
-    let r = split_resources!(ph);
+    let pheriperals = embassy_rp::init(Default::default());
+    let usb_driver = UsbDriver::new(pheriperals.USB, Irqs);
+    let r = split_resources!(pheriperals);
     let p = r.network_resources;
     let mut led_status = false;
     
@@ -160,8 +160,10 @@ async fn main(spawner: Spawner) -> ! {
         Some(value) => {
             log::info!("Server Address: {:?}", value.address.address());
         },
-        None => log::warn!("Unable to Get the Adrress")
-    }
+        None => {
+            log::warn!("Unable to Get the Adrress");
+        }
+    };
 
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
@@ -176,8 +178,10 @@ async fn main(spawner: Spawner) -> ! {
             Some(value) => {
                 log::info!("Server Address: {:?}", value.address.address());
             },
-            None => log::warn!("Unable to Get the Adrress")
-        }
+            None => {
+                log::warn!("Unable to Get the Adrress");
+            }
+        };
 
         log::info!("Listening on TCP: {}...", TCP_PORT);
         match with_deadline(start + Duration::from_secs(5), socket.accept(TCP_PORT)).await {
@@ -195,14 +199,13 @@ async fn main(spawner: Spawner) -> ! {
                 }
             }
             Err(_) => {
-                log::info!("No Connection after 5s");
+                log::warn!("No Connection after 5s");
                 control.gpio_set(0, led_status).await;
                 led_status  = !led_status;
                 continue;
             }
         }
 
-        Timer::after_millis(100).await;
         log::info!("Received Connection from {:?}", socket.remote_endpoint());
         control.gpio_set(0, true).await;
 
@@ -240,7 +243,7 @@ async fn main(spawner: Spawner) -> ! {
                     log::warn!("Connection is Closed");
                     break;
                 }
-            }
+            };
         }
     }
 }
