@@ -2,10 +2,13 @@
 #![no_main]
 
 use{
-    core::net::Ipv4Addr,
+    core::{
+        net::Ipv4Addr,
+        str::FromStr,
+    },
     embassy_executor::Spawner,
-    embassy_net::{tcp::TcpSocket, Runner, StackResources},
-    embassy_time::{Duration, Timer, Instant, with_deadline},
+    embassy_net::{tcp::TcpSocket, Runner, StackResources, Config, DhcpConfig},
+    embassy_time::{Duration, Timer, Instant, with_timeout},
     esp_hal::{clock::CpuClock, rng::Rng, timer::timg::TimerGroup},
     esp_println::println,
     esp_wifi::{
@@ -39,6 +42,7 @@ const WIFI_NETWORK: &str = env!("WIFI_NETWORK");
 const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
 const TCP_PORT: u16 = 1234;
 const REMOTE_ENDPOINT: (Ipv4Addr, u16) = (Ipv4Addr::new(192, 168, 65, 93), TCP_PORT);
+const CLIENT_NAME: &str = "ESP32-C3";
 
 #[embassy_executor::task]
 async fn net_task(mut runner: Runner<'static, WifiDevice<'static, WifiStaDevice>>) {
@@ -105,7 +109,9 @@ async fn main(spawner: Spawner) -> ! {
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
 
-    let config = embassy_net::Config::dhcpv4(Default::default());
+    let mut dhcp_config = DhcpConfig::default();
+    dhcp_config.hostname = Some(heapless::String::from_str(CLIENT_NAME).unwrap());
+    let config = Config::dhcpv4(dhcp_config);
 
     let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
@@ -129,6 +135,8 @@ async fn main(spawner: Spawner) -> ! {
     match stack.config_v4(){
         Some(value) => {
             log::info!("Server Address: {:?}", value.address.address());
+            log::info!("Gateway {:?}", value.gateway);
+            log::info!("DNS Server {:?}", value.dns_servers);
         },
         None => {
             log::warn!("Unable to Get the Adrress");
@@ -140,12 +148,13 @@ async fn main(spawner: Spawner) -> ! {
     let mut buf = [0; 1024];
 
     loop {
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        let start = Instant::now();       
+        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);     
 
         match stack.config_v4(){
             Some(value) => {
                 log::info!("Server Address: {:?}", value.address.address());
+                log::info!("Gateway {:?}", value.gateway);
+                log::info!("DNS Server {:?}", value.dns_servers);
             },
             None => {
                 log::warn!("Unable to Get the Adrress");
@@ -153,7 +162,7 @@ async fn main(spawner: Spawner) -> ! {
         };
 
         log::info!("Connecting to the server {:?}...", REMOTE_ENDPOINT);
-        match with_deadline(start + Duration::from_secs(5), socket.connect(REMOTE_ENDPOINT)).await {
+        match with_timeout(Duration::from_secs(5), socket.connect(REMOTE_ENDPOINT)).await {
             Ok(value) => {
                 match value {
                     Ok(()) => {

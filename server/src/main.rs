@@ -29,7 +29,7 @@ use {
     embassy_time::{
         Duration, 
         Timer,
-        with_deadline,
+        with_timeout,
         Instant,
     },
     embassy_net::{
@@ -159,6 +159,8 @@ async fn main(spawner: Spawner) -> ! {
     match stack.config_v4(){
         Some(value) => {
             log::info!("Server Address: {:?}", value.address.address());
+            log::info!("Gateway {:?}", value.gateway);
+            log::info!("DNS Server {:?}", value.dns_servers);
         },
         None => {
             log::warn!("Unable to Get the Adrress");
@@ -172,11 +174,12 @@ async fn main(spawner: Spawner) -> ! {
     loop {
         // Network Loop
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        let start = Instant::now();
 
         match stack.config_v4(){
             Some(value) => {
                 log::info!("Server Address: {:?}", value.address.address());
+                log::info!("Gateway {:?}", value.gateway);
+                log::info!("DNS Server {:?}", value.dns_servers);
             },
             None => {
                 log::warn!("Unable to Get the Adrress");
@@ -184,7 +187,7 @@ async fn main(spawner: Spawner) -> ! {
         };
 
         log::info!("Listening on TCP: {}...", TCP_PORT);
-        match with_deadline(start + Duration::from_secs(5), socket.accept(TCP_PORT)).await {
+        match with_timeout(Duration::from_secs(5), socket.accept(TCP_PORT)).await {
             Ok(value) => {
                 match value {
                     Ok(()) => {
