@@ -30,7 +30,6 @@ use {
         Duration, 
         Timer,
         with_timeout,
-        Instant,
     },
     embassy_net::{
         tcp::TcpSocket,

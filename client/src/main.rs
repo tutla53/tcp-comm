@@ -8,7 +8,7 @@ use{
     },
     embassy_executor::Spawner,
     embassy_net::{tcp::TcpSocket, Runner, StackResources, Config, DhcpConfig},
-    embassy_time::{Duration, Timer, Instant, with_timeout},
+    embassy_time::{Duration, Timer, with_timeout},
     esp_hal::{clock::CpuClock, rng::Rng, timer::timg::TimerGroup},
     esp_println::println,
     esp_wifi::{
